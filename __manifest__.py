@@ -1,13 +1,14 @@
 {
-    # Startup Pack — mapping des rôles Keycloak (présents dans le token OIDC)
-    # vers les groupes Odoo, AU LOGIN. Source de vérité = le token, pas un cron
-    # ni un trigger SQL. Bumpez `version` à chaque modif de la logique pour que
-    # `-u sp_auth_oidc_roles` recharge réellement le code.
-    "name": "Startup Pack — Sync rôles OIDC → groupes",
+    # Maps Keycloak roles (from the OIDC token) to Odoo groups AT LOGIN — the
+    # token is the source of truth (no cron, no SQL trigger). Also adds
+    # IdP-initiated logout. Bump `version` on every logic change so that
+    # `-u sp_auth_oidc_roles` actually reloads the code.
+    "name": "OIDC SSO (Keycloak): role mapping + IdP logout",
     "version": "19.0.2.0.0",
-    "summary": "Mappe resource_access.odoo.roles du token Keycloak vers les "
-               "groupes Odoo (admin/interne) à chaque connexion SSO.",
+    "summary": "Map Keycloak OIDC token roles to Odoo groups at login, and add "
+               "IdP-initiated logout (RP-initiated + OIDC Back-Channel Logout).",
     "author": "Startup Pack",
+    "website": "https://github.com/Startuppack/odoo-oidc-sso",
     "license": "LGPL-3",
     "category": "Authentication",
     "depends": ["auth_oauth", "auth_oidc"],

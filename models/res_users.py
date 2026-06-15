@@ -71,7 +71,7 @@ class ResUsers(models.Model):
         login = super()._auth_oauth_signin(provider, validation, params)
         if login:
             try:
-                self._sp_sync_oidc_groups(login, validation)
+                self._sp_sync_oidc_groups(login, validation, params)
             except Exception:  # jamais bloquer le login pour un souci de mapping
                 _logger.exception("sp_auth_oidc_roles: sync groupes échouée pour %s", login)
             # Mémorise de quoi faire un RP-initiated logout (end-session Keycloak)
@@ -93,26 +93,52 @@ class ResUsers(models.Model):
         return login
 
     @api.model
-    def _sp_extract_roles(self, validation):
-        """Rôles Keycloak présents dans le token : rôles du client `odoo`
-        (primaire) + rôles realm (repli). Retourne (set_roles, had_odoo_client_claim)."""
+    def _sp_decode_jwt_claims(self, token):
+        """Décode le payload d'un JWT SANS re-vérifier (déjà validé par le flux
+        d'auth) → dict de claims. {} si invalide. Sert à lire les rôles de
+        l'id_token quand Keycloak ne les met pas dans la réponse userinfo."""
+        if not token or token.count(".") < 2:
+            return {}
+        import base64
+        import json as _json
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)  # padding base64url
+        try:
+            return _json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
+        except Exception:
+            return {}
+
+    @api.model
+    def _sp_extract_roles(self, validation, params=None):
+        """Rôles Keycloak du client `odoo` (primaire) + rôles realm (repli), lus
+        DES DEUX sources : le `validation` (userinfo/token validé par auth_oidc)
+        ET l'`id_token` (params) décodé — selon où le mapper Keycloak pose le
+        claim. Consolide les deux approches historiques (sp_auth_oidc_roles lisait
+        le token, auth_oauth_fix lisait l'userinfo). Un seul addon couvre tout.
+        Retourne (set_roles, had_odoo_client_claim)."""
         roles = set()
-        ra = (validation or {}).get("resource_access") or {}
-        odoo_access = ra.get("odoo")
-        had_odoo_client_claim = isinstance(odoo_access, dict)
-        if had_odoo_client_claim:
-            roles.update(odoo_access.get("roles") or [])
-        realm_access = (validation or {}).get("realm_access") or {}
-        roles.update(realm_access.get("roles") or [])
+        had_odoo_client_claim = False
+        sources = [validation or {}]
+        idt = (params or {}).get("id_token")
+        if idt:
+            sources.append(self._sp_decode_jwt_claims(idt))
+        for src in sources:
+            ra = src.get("resource_access") or {}
+            odoo_access = ra.get("odoo")
+            if isinstance(odoo_access, dict):
+                had_odoo_client_claim = True
+                roles.update(odoo_access.get("roles") or [])
+            realm_access = src.get("realm_access") or {}
+            roles.update(realm_access.get("roles") or [])
         return roles, had_odoo_client_claim
 
     @api.model
-    def _sp_sync_oidc_groups(self, login, validation):
+    def _sp_sync_oidc_groups(self, login, validation, params=None):
         user = self.sudo().search([("login", "=", login)], limit=1)
         if not user:
             return
 
-        roles, had_odoo_client_claim = self._sp_extract_roles(validation)
+        roles, had_odoo_client_claim = self._sp_extract_roles(validation, params)
 
         def ref(xmlid):
             return self.env.ref(xmlid, raise_if_not_found=False)
@@ -151,7 +177,8 @@ class ResUsers(models.Model):
 
         # write() recalcule les groupes impliqués et applique la contrainte de
         # groupes-type disjoints (portail retiré avant ajout interne).
-        user.write({"group_ids": commands})
+        # NB Odoo 18 : le champ est `groups_id` (renommé en `group_ids` en 19).
+        user.write({"groups_id": commands})
         _logger.info(
             "sp_auth_oidc_roles: %s -> %s (roles KC=%s)",
             login, "ADMIN" if is_admin else "interne", sorted(roles),

@@ -124,10 +124,13 @@ class ResUsers(models.Model):
             sources.append(self._sp_decode_jwt_claims(idt))
         for src in sources:
             ra = src.get("resource_access") or {}
-            odoo_access = ra.get("odoo")
-            if isinstance(odoo_access, dict):
-                had_odoo_client_claim = True
-                roles.update(odoo_access.get("roles") or [])
+            # Le client KC s'appelle `odoo-<slug>` (ex: `odoo-secbearn`), pas
+            # juste `odoo` — on cherche toute clé qui commence par `odoo`.
+            for client_id, client_access in ra.items():
+                if client_id == "odoo" or client_id.startswith("odoo-"):
+                    if isinstance(client_access, dict):
+                        had_odoo_client_claim = True
+                        roles.update(client_access.get("roles") or [])
             realm_access = src.get("realm_access") or {}
             roles.update(realm_access.get("roles") or [])
         return roles, had_odoo_client_claim

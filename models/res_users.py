@@ -15,6 +15,7 @@ import hashlib
 import logging
 
 from odoo import api, fields, models
+from odoo.exceptions import AccessDenied
 
 _logger = logging.getLogger(__name__)
 
@@ -68,6 +69,37 @@ class ResUsers(models.Model):
 
     @api.model
     def _auth_oauth_signin(self, provider, validation, params):
+        # Detect existing account linked to a different OAuth provider (e.g. when
+        # switching from global realm to a dedicated auth-client realm). Instead
+        # of crashing with a duplicate-login IntegrityError (→ generic oauth_error=3),
+        # store a human-readable message in session so the controller can surface it.
+        email = (
+            (validation or {}).get("email")
+            or (validation or {}).get("preferred_username")
+            or ""
+        )
+        if email:
+            try:
+                existing = self.sudo().search(
+                    [("login", "=", email), ("oauth_uid", "!=", False)], limit=1
+                )
+                if (
+                    existing
+                    and existing.oauth_provider_id
+                    and existing.oauth_provider_id.id != int(provider)
+                ):
+                    try:
+                        from odoo.http import request as _req
+                        if _req:
+                            _req.session["_sp_conflict_email"] = email
+                    except Exception:
+                        pass
+                    raise AccessDenied("sp_wrong_provider")
+            except AccessDenied:
+                raise
+            except Exception:
+                _logger.exception("sp_auth_oidc_roles: provider conflict pre-check")
+
         login = super()._auth_oauth_signin(provider, validation, params)
         if login:
             try:

@@ -13,11 +13,12 @@ import json
 import logging
 import os
 import uuid
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 from odoo import http
 from odoo.http import request
 from odoo.addons.web.controllers.home import Home
+from odoo.addons.auth_oauth.controllers.main import OAuthLogin
 
 _logger = logging.getLogger(__name__)
 
@@ -108,3 +109,23 @@ class SpOidcLogout(Home):
         except Exception:
             _logger.exception("sp_auth_oidc_roles: verify logout_token")
             return None
+
+
+class SpOidcSignin(OAuthLogin):
+    """Override /auth_oauth/signin to turn a provider-conflict AccessDenied into a
+    human-readable error message instead of the generic "Access Denied" screen."""
+
+    @http.route()
+    def signin(self, **kw):
+        response = super().signin(**kw)
+        try:
+            conflict_email = request.session.pop("_sp_conflict_email", None)
+        except Exception:
+            conflict_email = None
+        if conflict_email:
+            msg = quote(
+                f"L'adresse {conflict_email} est déjà associée à une autre méthode "
+                f"de connexion. Veuillez utiliser la méthode d'authentification d'origine."
+            )
+            return request.redirect(f"/web/login?error={msg}", local=False)
+        return response

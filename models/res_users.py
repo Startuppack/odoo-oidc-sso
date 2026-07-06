@@ -44,6 +44,15 @@ ROLE_MAP = {
 ADMIN_ROLES = {"admin", "system-admin", "technique"}
 
 
+def _is_org_admin(roles):
+    """Rôle realm `<slug>-org-admin` (posé par grant_org_owner_roles dès le
+    provisioning, AVANT les rôles par-client qui peuvent arriver en différé —
+    course provisioning async / init-oidc du chart). Règle produit : un
+    org-admin est admin sur TOUS les outils → il doit être group_system dès le
+    premier login, même si `resource_access.odoo-<slug>.roles` manque encore."""
+    return any(r.endswith("-org-admin") for r in roles)
+
+
 class ResUsers(models.Model):
     _inherit = "res.users"
 
@@ -203,7 +212,7 @@ class ResUsers(models.Model):
         #    (token = source de vérité). Si le claim client `odoo` est absent
         #    (mapper KC mal configuré), on NE rétrograde PAS — évite une
         #    démotion de masse accidentelle.
-        is_admin = bool(roles & ADMIN_ROLES)
+        is_admin = bool(roles & ADMIN_ROLES) or _is_org_admin(roles)
         if g_system:
             if is_admin:
                 commands.append((4, g_system.id))

@@ -3,30 +3,50 @@
   <!--
     SSO SEUL — page de connexion.
 
-    Le mot de passe local n'authentifie plus (cf. res_users._check_credentials),
-    mais `web.login` continuait d'afficher le formulaire : un champ qui ne peut
-    que refuser, un « Reset Password » qui envoie un mail sans effet et un
-    « Don't have an account? » qui propose une inscription locale — trois portes
-    qui n'existent plus. On ne laisse que le bouton du fournisseur d'identité.
+    Le mot de passe local n'authentifie plus (res_users._check_credentials), et
+    la page ne doit plus proposer ce qui ne marche pas : champs identifiants,
+    bouton « Log in », « Reset Password » (qui réinitialiserait un mot de passe
+    sans usage) et « Don't have an account? » (l'inscription locale n'existe
+    pas). Il reste le bouton du fournisseur d'identité.
 
-    Les XPath visent les attributs RÉELS des gabarits Odoo 18 : le formulaire
-    porte `t-attf-action` (et non un `class` littéral : `t-attf-class` est
-    calculé), le lien d'inscription un `t-attf-href`. Vérifiés un à un contre
-    les fichiers de l'image — un XPath qui ne matche pas fait échouer le
-    chargement du module, donc le démarrage d'Odoo, sur TOUS les tenants.
+    ⚠️ On masque les CHAMPS, pas le formulaire : le conteneur `o_login_auth` où
+    `auth_oauth` injecte ses boutons est À L'INTÉRIEUR du <form>. Masquer le
+    formulaire entier emporte le bouton SSO avec lui et rend Odoo totalement
+    inaccessible (vécu sur intern avant correction).
 
-    Échappatoire : /web/login?local=1 affiche encore le formulaire, pour le
-    compte de secours `admin` si Keycloak est indisponible.
+    Chaque XPath vise la structure réelle d'Odoo 18 et a été vérifié contre les
+    fichiers de l'image : un XPath qui ne matche pas fait échouer le chargement
+    du module, donc le démarrage d'Odoo, sur tous les tenants.
+
+    Échappatoire : /web/login?local=1 réaffiche tout, pour le compte `admin`.
   -->
   <template id="sp_login_sso_only" inherit_id="web.login"
-            name="SSO seul : masque le formulaire de connexion locale">
-    <xpath expr="//form[@t-attf-action='/web/login']" position="attributes">
-      <attribute name="t-if">request.params.get('local') or error or message</attribute>
+            name="SSO seul : retire les identifiants locaux de la page de connexion">
+
+    <!-- Champ Email -->
+    <xpath expr="//form[@t-attf-action='/web/login']//div[contains(@class,'field-login')]"
+           position="attributes">
+      <attribute name="t-if">request.params.get('local')</attribute>
+    </xpath>
+
+    <!-- Champ Mot de passe (le div qui le porte ; il n'a pas de classe propre) -->
+    <xpath expr="//form[@t-attf-action='/web/login']//div[input[@name='password']]"
+           position="attributes">
+      <attribute name="t-if">request.params.get('local')</attribute>
+    </xpath>
+
+    <!-- Bouton « Log in » (le lien superuser porte name=redirect, on n'y touche pas) -->
+    <xpath expr="//form[@t-attf-action='/web/login']//button[@type='submit' and not(@name)]"
+           position="attributes">
+      <attribute name="t-if">request.params.get('local')</attribute>
     </xpath>
   </template>
 
-  <template id="sp_login_no_signup" inherit_id="auth_signup.login"
-            name="SSO seul : retire le lien d'inscription locale">
+  <template id="sp_login_no_local_links" inherit_id="auth_signup.login"
+            name="SSO seul : retire réinitialisation et inscription locales">
+    <xpath expr="//a[contains(@t-attf-href,'/web/reset_password')]" position="attributes">
+      <attribute name="t-if">request.params.get('local')</attribute>
+    </xpath>
     <xpath expr="//a[contains(@t-attf-href,'/web/signup')]" position="attributes">
       <attribute name="t-if">False</attribute>
     </xpath>

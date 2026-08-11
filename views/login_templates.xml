@@ -23,6 +23,16 @@
   <template id="sp_login_sso_only" inherit_id="web.login"
             name="SSO seul : retire les identifiants locaux de la page de connexion">
 
+    <!-- Odoo pose `d-none` sur le formulaire tant qu'aucun identifiant n'est
+         pré-rempli : c'est le composant OWL `web.user_switch` qui le dévoile
+         quand l'utilisateur saisit son compte. En SSO seul il n'y a plus rien à
+         saisir, donc plus rien ne le dévoile — et comme le bouton du
+         fournisseur d'identité vit DANS ce formulaire, la page s'affichait
+         vide. On rend donc la visibilité inconditionnelle. -->
+    <xpath expr="//form[@t-attf-action='/web/login']" position="attributes">
+      <attribute name="t-attf-class">oe_login_form</attribute>
+    </xpath>
+
     <!-- Champ Email -->
     <xpath expr="//form[@t-attf-action='/web/login']//div[contains(@class,'field-login')]"
            position="attributes">

@@ -33,6 +33,16 @@
       <attribute name="t-attf-class">oe_login_form</attribute>
     </xpath>
 
+    <!-- Le sélecteur « Choose a user » (composant OWL `web.user_switch`)
+         pré-remplit le champ identifiant au clic. Ce champ n'existe plus en SSO
+         seul : le composant plante sur `Cannot set properties of null` et un
+         « Oops! Something went wrong » s'affiche à la place de la connexion,
+         pour tout navigateur ayant déjà servi à se connecter. On le retire avec
+         les champs qu'il pilote. -->
+    <xpath expr="//owl-component[@name='web.user_switch']" position="attributes">
+      <attribute name="t-if">request.params.get('local')</attribute>
+    </xpath>
+
     <!-- Champ Email -->
     <xpath expr="//form[@t-attf-action='/web/login']//div[contains(@class,'field-login')]"
            position="attributes">

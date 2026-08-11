@@ -4,7 +4,7 @@
     # IdP-initiated logout. Bump `version` on every logic change so that
     # `-u sp_auth_oidc_roles` actually reloads the code.
     "name": "OIDC SSO (Keycloak): role mapping + IdP logout",
-    "version": "18.0.1.1.0",
+    "version": "18.0.1.2.0",
     "summary": "Map Keycloak OIDC token roles to Odoo groups at login, and add "
                "IdP-initiated logout (RP-initiated + OIDC Back-Channel Logout).",
     "author": "Startup Pack",
@@ -12,6 +12,7 @@
     "license": "LGPL-3",
     "category": "Authentication",
     "depends": ["auth_oauth", "auth_oidc"],
+    "data": ["views/login_templates.xml"],
     "installable": True,
     "auto_install": False,
 }

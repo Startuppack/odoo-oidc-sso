@@ -56,6 +56,30 @@ def _is_org_admin(roles):
 class ResUsers(models.Model):
     _inherit = "res.users"
 
+    # ── SSO SEUL : le mot de passe local n'authentifie plus ──────────────────
+    # Règle produit : on entre dans les outils par Keycloak, point. Un mot de
+    # passe Odoo qui reste valable, c'est un deuxième chemin d'authentification
+    # que la plateforme ne contrôle pas : il survit à la désactivation du compte
+    # côté annuaire (départ d'un salarié désactivé dans Entra/Keycloak), il
+    # ignore le MFA et les restrictions d'organisation portées par le realm, et
+    # il ne laisse aucune trace dans les sessions KC (donc le « déconnexion
+    # partout » ne le coupe pas).
+    #
+    # SEULE exception : `admin` (base.user_admin), compte de secours du tenant.
+    # Sans lui, une panne Keycloak rendrait l'instance définitivement
+    # inaccessible — y compris pour la réparer. Son mot de passe est posé par le
+    # chart (init `set-admin-password`) et n'est pas distribué aux utilisateurs.
+    _SP_LOCAL_LOGIN_ALLOWED = ("admin",)
+
+    def _check_credentials(self, credential, env):
+        if credential.get("type") == "password" and \
+                self.sudo().login not in self._SP_LOCAL_LOGIN_ALLOWED:
+            _logger.info(
+                "SSO seul : mot de passe refusé pour %s (uid=%s) — "
+                "authentification par Keycloak uniquement", self.sudo().login, self.id)
+            raise AccessDenied()
+        return super()._check_credentials(credential, env)
+
     # « Époque de session » : changer cette valeur invalide TOUTES les sessions
     # Odoo de l'utilisateur (cf. _compute_session_token). Utilisé par le
     # Back-Channel Logout (controllers/main.py) pour tuer la session serveur quand

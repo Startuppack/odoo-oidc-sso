@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!--
+    SSO SEUL — page de connexion.
+
+    Le mot de passe local n'authentifie plus (cf. res_users._check_credentials),
+    mais `web.login` continuait d'afficher le formulaire : un champ qui ne peut
+    que refuser, un « Reset Password » qui envoie un mail sans effet et un
+    « Don't have an account? » qui propose une inscription locale — trois portes
+    qui n'existent plus. On ne laisse que le bouton du fournisseur d'identité.
+
+    Les XPath visent les attributs RÉELS des gabarits Odoo 18 : le formulaire
+    porte `t-attf-action` (et non un `class` littéral : `t-attf-class` est
+    calculé), le lien d'inscription un `t-attf-href`. Vérifiés un à un contre
+    les fichiers de l'image — un XPath qui ne matche pas fait échouer le
+    chargement du module, donc le démarrage d'Odoo, sur TOUS les tenants.
+
+    Échappatoire : /web/login?local=1 affiche encore le formulaire, pour le
+    compte de secours `admin` si Keycloak est indisponible.
+  -->
+  <template id="sp_login_sso_only" inherit_id="web.login"
+            name="SSO seul : masque le formulaire de connexion locale">
+    <xpath expr="//form[@t-attf-action='/web/login']" position="attributes">
+      <attribute name="t-if">request.params.get('local') or error or message</attribute>
+    </xpath>
+  </template>
+
+  <template id="sp_login_no_signup" inherit_id="auth_signup.login"
+            name="SSO seul : retire le lien d'inscription locale">
+    <xpath expr="//a[contains(@t-attf-href,'/web/signup')]" position="attributes">
+      <attribute name="t-if">False</attribute>
+    </xpath>
+  </template>
+</odoo>

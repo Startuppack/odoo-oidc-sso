@@ -72,12 +72,22 @@ class ResUsers(models.Model):
     _SP_LOCAL_LOGIN_ALLOWED = ("admin",)
 
     def _check_credentials(self, credential, env):
-        if credential.get("type") == "password" and \
-                self.sudo().login not in self._SP_LOCAL_LOGIN_ALLOWED:
-            _logger.info(
-                "SSO seul : mot de passe refusé pour %s (uid=%s) — "
-                "authentification par Keycloak uniquement", self.sudo().login, self.id)
-            raise AccessDenied()
+        if credential.get("type") == "password":
+            # `res.users.check()` — the gate of EVERY RPC call — runs this on an
+            # EMPTY recordset: it builds `Environment(cr, uid, {})[self._name]`,
+            # so the user is carried by the environment, never by `self`.
+            # Reading `self.login` there yields False, which is not in the
+            # allow-list: `admin` was refused its own RPC session and the whole
+            # platform-side provisioning (tools/odoo.py) failed with
+            # AccessDenied, silently, on every tenant. The login therefore comes
+            # from whichever of the three the caller actually filled in.
+            login = (self.sudo().login if self else None) \
+                or credential.get("login") or self.env.user.login
+            if login not in self._SP_LOCAL_LOGIN_ALLOWED:
+                _logger.info(
+                    "SSO seul : mot de passe refusé pour %s (uid=%s) — "
+                    "authentification par Keycloak uniquement", login, self.env.uid)
+                raise AccessDenied()
         return super()._check_credentials(credential, env)
 
     # « Époque de session » : changer cette valeur invalide TOUTES les sessions

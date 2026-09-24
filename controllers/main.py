@@ -17,8 +17,8 @@ from urllib.parse import urlencode, quote
 
 from odoo import http
 from odoo.http import request
-from odoo.addons.web.controllers.home import Home
-from odoo.addons.auth_oauth.controllers.main import OAuthLogin
+from odoo.addons.web.controllers.session import Session
+from odoo.addons.auth_oauth.controllers.main import OAuthController
 
 _logger = logging.getLogger(__name__)
 
@@ -33,10 +33,19 @@ LOGOUT_DONE = os.environ.get(
 )
 
 
-class SpOidcLogout(Home):
+class SpOidcLogout(Session):
+    """Étend /web/session/logout pour enchaîner sur la déconnexion Keycloak.
+
+    La classe de base DOIT être celle qui porte la route. `logout` est défini
+    par `web.controllers.session.Session` (@http.route('/web/session/logout')),
+    PAS par `Home` : hériter de `Home` laissait `@http.route()` sans route
+    parente à reprendre, et Odoo retirait purement et simplement l'endpoint —
+    « Home (extended by ...).logout is a controller endpoint without any route,
+    skipping ».
+    """
 
     @http.route()
-    def logout(self, redirect="/web"):
+    def logout(self, redirect="/odoo"):
         # Réutilise la route /web/session/logout du controller web standard.
         end = request.session.get("oidc_end_session") if request else None
         if end:
@@ -111,9 +120,21 @@ class SpOidcLogout(Home):
             return None
 
 
-class SpOidcSignin(OAuthLogin):
+class SpOidcSignin(OAuthController):
     """Override /auth_oauth/signin to turn a provider-conflict AccessDenied into a
-    human-readable error message instead of the generic "Access Denied" screen."""
+    human-readable error message instead of the generic "Access Denied" screen.
+
+    La classe de base DOIT être `OAuthController`, qui porte
+    @http.route('/auth_oauth/signin'). En héritant de `OAuthLogin` — qui
+    n'expose que la PAGE de login et ne définit pas `signin` — le
+    `@http.route()` nu n'avait aucune route parente à reprendre : Odoo
+    n'enregistrait plus le point de rappel OAuth du tout. Le retour depuis
+    Keycloak tombait alors dans le vide et l'utilisateur rebondissait sur
+    /web/login?oauth_error=3, SSO Odoo totalement inutilisable sur un tenant
+    neuf. Constaté le 2026-09-24, l'avertissement au démarrage le disait
+    explicitement : « signin is a controller endpoint without any route,
+    skipping ».
+    """
 
     @http.route()
     def signin(self, **kw):
